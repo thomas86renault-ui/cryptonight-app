@@ -1196,7 +1196,7 @@ async function submitWallet() {
           // Prix live disponible, sinon fallback
           const livePrice = LIVE[sym]?.eur || price(sym);
           S.cryptos.push({
-            id:          Date.now().toString() + Math.random(),
+            id: Date.now().toString() + Math.floor(Math.random() * 10000),
             name:        t.name,
             symbol:      sym,
             qty:         t.quantity,
@@ -1267,10 +1267,10 @@ function submitMarket(section) {
   renderMarkets();
 }
 
-function deleteMarket(section, id) {
-  if (!confirm("Supprimer ?")) return;
-  S.markets[section] = S.markets[section].filter(m => m.id !== id);
-  save(); renderMarkets();
+function deleteCrypto(id) {
+  if (!confirm("Supprimer cette crypto ?")) return;
+  S.cryptos = S.cryptos.filter(c => c.id !== id);
+  save(); renderPortfolio();
 }
 
 function renderMarkets() {
