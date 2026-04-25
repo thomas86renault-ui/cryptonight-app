@@ -1377,15 +1377,21 @@ async function runAI() {
   res.style.display = "none";
   ph.innerHTML = `<div class="pulse"><span></span><span></span><span></span></div>`;
 
-  // ── 1. VÉRIFICATION QUOTA ──
+  // ── 1. VÉRIFICATION QUOTA (Free uniquement) ──
   if (TID && S.plan !== "premium") {
     try {
-      const checkRes  = await fetch(`${WORKER_URL}/ai/check?tid=${TID}`, { signal: AbortSignal.timeout(6000) });
+      const checkRes  = await fetch(`${WORKER_URL}/ai/check?tid=${TID}`, {
+        signal: AbortSignal.timeout(6000)
+      });
       const checkData = await checkRes.json();
 
       if (!checkData.allowed) {
         ph.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:28px;height:28px;opacity:.3"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:28px;height:28px;opacity:.3">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
           <div style="font-size:13px;color:var(--txt2);text-align:center;line-height:1.7">
             <strong style="color:var(--txt)">Quota hebdomadaire atteint</strong><br>
             Tu as utilisé tes ${checkData.limit} analyses gratuites cette semaine.<br>
@@ -1400,25 +1406,26 @@ async function runAI() {
       }
 
       if (checkData.remaining !== undefined) {
-        document.getElementById("ai-sub").textContent = `${checkData.remaining} analyse(s) restante(s) cette semaine`;
+        document.getElementById("ai-sub").textContent =
+          `${checkData.remaining} analyse(s) restante(s) cette semaine`;
       }
     } catch (e) {
       console.warn("Quota check failed, proceeding:", e.message);
     }
   }
 
-  // ── 2. APPEL IA ──
+  // ── 2. CONSTRUCTION DU PROMPT ──
   btn.textContent = "Analyse…";
 
-  const enriched   = all.map(a => {
+  const enriched  = all.map(a => {
     const cp = price(a.symbol), val = a.qty * cp, cost = a.qty * a.buyPrice;
     return { ...a, cp, val, cost, pnl: val-cost, pct: cost > 0 ? (val-cost)/cost*100 : 0 };
   });
-  const totalVal   = enriched.reduce((s, a) => s + a.val,  0);
-  const totalCost  = enriched.reduce((s, a) => s + a.cost, 0);
-  const totalPnl   = totalVal - totalCost;
-  const hasCrypto  = S.cryptos.length > 0 || S.markets.cex.length > 0;
-  const hasStocks  = S.markets.stocks.length > 0 || S.markets.etf.length > 0;
+  const totalVal  = enriched.reduce((s, a) => s + a.val,  0);
+  const totalCost = enriched.reduce((s, a) => s + a.cost, 0);
+  const totalPnl  = totalVal - totalCost;
+  const hasCrypto = S.cryptos.length > 0 || S.markets.cex.length > 0;
+  const hasStocks = S.markets.stocks.length > 0 || S.markets.etf.length > 0;
 
   const bycat = {};
   enriched.forEach(a => {
@@ -1439,16 +1446,7 @@ async function runAI() {
     ? `\n**📈 Diversification** — Cet utilisateur n'a que de la crypto. Suggère 1 ETF simple pour diversifier.`
     : "";
 
-  try {
-    const aiRes = await fetch(`${WORKER_URL}/ai/analyze`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model:      "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        messages: [{
-          role: "user",
-          content: `Tu es un conseiller en gestion de patrimoine pour CryptoNight. Analyse le patrimoine COMPLET (crypto + actions + ETF). Parle en français, directement, comme un ami qui s'y connaît.
+  const prompt = `Tu es un conseiller en gestion de patrimoine pour CryptoNight. Analyse le patrimoine COMPLET (crypto + actions + ETF). Parle en français, directement, comme un ami qui s'y connaît.
 
 ═══ PATRIMOINE TOTAL : ${eur(totalVal)} ═══
 P&L global : ${totalPnl>=0?"+":""}${eur(totalPnl)} (${totalPnl>=0?"+":""}${((totalPnl/totalCost)*100).toFixed(1)}%)
@@ -1470,13 +1468,39 @@ Réponds en markdown :
 **🎯 Action de la semaine** — 1 seule action concrète et réalisable
 ${bonusInstruction}
 
-Maximum 320 mots. Sois direct et précis.`
-        }]
-      })
+Maximum 320 mots. Sois direct et précis.`;
+
+  // ── 3. APPEL VIA LE WORKER ──
+  try {
+    const aiRes = await fetch(`${WORKER_URL}/ai/analyze`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ tid: TID || 0, prompt }),
+      signal:  AbortSignal.timeout(30000), // 30s max
     });
 
-    const aiData = await aiRes.json();
-    const txt    = aiData.content?.[0]?.text || "Erreur lors de l'analyse.";
+    if (!aiRes.ok) {
+      const errData = await aiRes.json().catch(() => ({}));
+
+      // Quota dépassé côté serveur (double vérification)
+      if (aiRes.status === 429 || errData.error === "quota_exceeded") {
+        ph.innerHTML = `
+          <div style="font-size:13px;color:var(--txt2);text-align:center;line-height:1.7">
+            <strong style="color:var(--txt)">Quota hebdomadaire atteint</strong><br>
+            Réinitialisation le lundi prochain.
+          </div>
+          <button onclick="upgrade()" style="margin-top:8px;padding:9px 20px;border-radius:8px;border:1px solid var(--gold);background:transparent;color:var(--gold);font-size:12px;font-weight:700;cursor:pointer">
+            Passer Premium →
+          </button>`;
+        btn.disabled    = false;
+        btn.textContent = "Analyser →";
+        return;
+      }
+      throw new Error(`Worker error ${aiRes.status}`);
+    }
+
+    const data = await aiRes.json();
+    const txt  = data.text || "Erreur lors de l'analyse.";
 
     ph.style.display  = "none";
     res.style.display = "block";
@@ -1486,36 +1510,28 @@ Maximum 320 mots. Sois direct et précis.`
       .replace(/^#{1,3} (.+)$/gm,"<strong>$1</strong>")
       .replace(/\n/g,            "<br>");
 
-    // ── 3. LOG L'ANALYSE EN BASE ──
-    if (TID) {
-      fetch(`${WORKER_URL}/ai/log`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ tid: TID }),
-      }).catch(() => {});
-
-      // Met à jour le compteur
-      if (S.plan === "free") {
-        fetch(`${WORKER_URL}/ai/check?tid=${TID}`)
-          .then(r => r.json())
-          .then(d => {
-            if (d.remaining !== undefined) {
-              document.getElementById("ai-sub").textContent = d.remaining > 0
-                ? `${d.remaining} analyse(s) restante(s) cette semaine`
-                : "Quota hebdomadaire atteint";
-            }
-          }).catch(() => {});
-      }
+    // ── 4. MET À JOUR LE COMPTEUR ──
+    if (TID && S.plan === "free") {
+      fetch(`${WORKER_URL}/ai/check?tid=${TID}`)
+        .then(r => r.json())
+        .then(d => {
+          if (d.remaining !== undefined) {
+            document.getElementById("ai-sub").textContent = d.remaining > 0
+              ? `${d.remaining} analyse(s) restante(s) cette semaine`
+              : "Quota hebdomadaire atteint";
+          }
+        }).catch(() => {});
     }
 
   } catch (e) {
-    ph.innerHTML = `<span style="color:var(--txt3);font-size:13px">Erreur de connexion. Réessaie dans quelques secondes.</span>`;
     ph.style.display = "flex";
+    ph.innerHTML = `<span style="color:var(--txt3);font-size:13px">Erreur de connexion. Réessaie dans quelques secondes.</span>`;
   }
 
   btn.disabled    = false;
   btn.textContent = "Analyser →";
 }
+
 
 // ══════════════════════════════════════
 //  PLAN
