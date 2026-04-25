@@ -1154,9 +1154,10 @@ function qcFill(name, sym) {
 }
 
 async function submitWallet() {
- const addr = document.getElementById("w-addr").value.trim().replace(/\s/g, '');
+  const addr  = document.getElementById("w-addr").value.trim().replace(/\s/g, '');
   const label = document.getElementById("w-label").value.trim();
   if (!addr) { alert("Entre une adresse publique."); return; }
+
   const scanBox  = document.getElementById("scan-box");
   const scanTxt  = document.getElementById("scan-txt");
   const scanAddr = document.getElementById("scan-addr");
@@ -1172,7 +1173,7 @@ async function submitWallet() {
     const tokens = await fetchWalletBalances(addr, modalChain);
 
     if (tokens === null) {
-      scanTxt.innerHTML  = "⚠️ Impossible de lire le wallet.<br><small>Vérifie l'adresse et la blockchain sélectionnée.</small>";
+      scanTxt.innerHTML   = "⚠️ Impossible de lire le wallet.<br><small>Vérifie l'adresse et la blockchain sélectionnée.</small>";
       scanTxt.style.color = "var(--red)";
       if (okBtn) okBtn.disabled = false;
       return;
@@ -1183,17 +1184,23 @@ async function submitWallet() {
       await sleep(1500);
     } else {
       scanTxt.textContent = `✅ ${tokens.length} token(s) détecté(s) !`;
-      await sleep(800);
+
+      // ── Fetch les prix live AVANT d'ajouter les tokens ──
+      scanTxt.textContent = "Récupération des prix live…";
+      await fetchCryptoPrices();
+
       tokens.forEach(t => {
         const sym    = t.symbol.toUpperCase();
         const exists = S.cryptos.find(c => c.symbol === sym && c.source === "wallet" && c.walletAddr === addr);
         if (!exists) {
+          // Prix live disponible, sinon fallback
+          const livePrice = LIVE[sym]?.eur || price(sym);
           S.cryptos.push({
             id:          Date.now().toString() + Math.random(),
             name:        t.name,
             symbol:      sym,
             qty:         t.quantity,
-            buyPrice:    price(sym),
+            buyPrice:    livePrice, // ← prix live au moment de l'ajout
             buyDate:     new Date().toISOString().split("T")[0],
             source:      "wallet",
             walletAddr:  addr,
@@ -1203,7 +1210,9 @@ async function submitWallet() {
         }
       });
       save();
+      await sleep(500);
     }
+
   } catch (e) {
     scanTxt.textContent  = "Erreur de connexion. Réessaie.";
     scanTxt.style.color  = "var(--red)";
@@ -1216,28 +1225,7 @@ async function submitWallet() {
   document.getElementById("w-label").value = "";
   if (okBtn) okBtn.disabled = false;
   closeModal();
-fetchCryptoPrices().then(() => renderPortfolio());
-}
-
-function submitManual() {
-  const name  = document.getElementById("m-name").value.trim();
-  const sym   = document.getElementById("m-sym").value.trim().toUpperCase();
-  const qty   = parseFloat(document.getElementById("m-qty").value);
-  const bp    = parseFloat(document.getElementById("m-price").value);
-  const date  = document.getElementById("m-date").value;
-  if (!name || !sym || isNaN(qty) || qty <= 0 || isNaN(bp) || bp <= 0) { alert("Remplis tous les champs."); return; }
-  S.cryptos.push({ id:Date.now().toString(), name, symbol:sym, qty, buyPrice:bp, buyDate:date||new Date().toISOString().split("T")[0], source:"manual" });
-  save();
-  ["m-name","m-sym","m-qty","m-price","m-date"].forEach(id => document.getElementById(id).value = "");
-  closeModal();
-  // ← Force refresh des prix avant d'afficher
-  fetchCryptoPrices().then(() => renderPortfolio());
-}
-
-function deleteCrypto(id) {
-  if (!confirm("Supprimer cette crypto ?")) return;
-  S.cryptos = S.cryptos.filter(c => c.id !== id);
-  save(); renderPortfolio();
+  renderPortfolio();
 }
 
 // ══════════════════════════════════════
