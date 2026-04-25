@@ -777,16 +777,36 @@ const S = {
 
 function save() {
   try {
-    localStorage.setItem("cn_c",    JSON.stringify(S.cryptos));
-    localStorage.setItem("cn_m",    JSON.stringify(S.markets));
-    localStorage.setItem("cn_plan", S.plan);
+    localStorage.setItem("cn_c",          JSON.stringify(S.cryptos));
+    localStorage.setItem("cn_m",          JSON.stringify(S.markets));
+    localStorage.setItem("cn_plan",       S.plan);
+    localStorage.setItem("cn_updated_at", Date.now().toString()); // ← ajoute ça
   } catch {}
+
+  if (TID) {
+    syncToSupabase().catch(e => console.warn("Supabase sync failed:", e.message));
+  }
 }
+
+// Sync vers Supabase (non bloquant)
+async function syncToSupabase() {
+  await fetch(`${WORKER_URL}/portfolio/save`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({
+      tid:     TID,
+      cryptos: S.cryptos,
+      markets: S.markets,
+    }),
+    signal: AbortSignal.timeout(8000),
+  });
+}
+// ── LOAD ──
 function load() {
   try {
-    const c = localStorage.getItem("cn_c");    if (c) S.cryptos  = JSON.parse(c);
-    const m = localStorage.getItem("cn_m");    if (m) S.markets  = JSON.parse(m);
-    const p = localStorage.getItem("cn_plan"); if (p) S.plan     = p;
+    const c = localStorage.getItem("cn_c");    if (c) S.cryptos = JSON.parse(c);
+    const m = localStorage.getItem("cn_m");    if (m) S.markets = JSON.parse(m);
+    const p = localStorage.getItem("cn_plan"); if (p) S.plan    = p;
   } catch {}
 }
 
@@ -794,28 +814,75 @@ function load() {
 //  INIT
 // ══════════════════════════════════════
 async function init() {
+  // 1. Charge depuis localStorage d'abord (instantané)
   load();
   applyPlan();
   renderPortfolio();
   startPriceRefresh();
 
-  // Sync utilisateur avec Supabase
+  // 2. Si TID disponible → sync depuis Supabase
   if (TID) {
     try {
-      const res  = await fetch(`${WORKER_URL}/user/upsert`, {
+      // Récupère le plan
+      const userRes  = await fetch(`${WORKER_URL}/user/upsert`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ tid: TID }),
+        signal:  AbortSignal.timeout(6000),
       });
-      const data = await res.json();
-      if (data.plan && data.plan !== S.plan) {
-        S.plan = data.plan;
-        save();
+      const userData = await userRes.json();
+      if (userData.plan && userData.plan !== S.plan) {
+        S.plan = userData.plan;
+        localStorage.setItem("cn_plan", S.plan);
         applyPlan();
       }
-    } catch (e) { console.warn("User sync failed:", e.message); }
+
+      // Récupère le portfolio depuis Supabase
+      const pfRes  = await fetch(`${WORKER_URL}/portfolio/load?tid=${TID}`, {
+        signal: AbortSignal.timeout(6000),
+      });
+      const pfData = await pfRes.json();
+
+      if (pfData.found) {
+        // Compare les dates — prend le plus récent
+        const remoteDate = new Date(pfData.updated_at || 0).getTime();
+        const localDate  = parseInt(localStorage.getItem("cn_updated_at") || 0);
+
+        if (remoteDate > localDate || !S.cryptos.length) {
+          // Supabase est plus récent → on prend Supabase
+          S.cryptos = pfData.cryptos  || [];
+          S.markets = pfData.markets  || { stocks:[], etf:[], cex:[] };
+          // Sauvegarde en localStorage pour la prochaine fois
+          localStorage.setItem("cn_c",          JSON.stringify(S.cryptos));
+          localStorage.setItem("cn_m",          JSON.stringify(S.markets));
+          localStorage.setItem("cn_updated_at", remoteDate.toString());
+          console.log("✅ Portfolio chargé depuis Supabase");
+          // Re-render avec les nouvelles données
+          await fetchCryptoPrices();
+          renderPortfolio();
+          renderMarkets();
+        } else {
+          // localStorage est plus récent → on push vers Supabase
+          console.log("✅ Portfolio local plus récent → sync vers Supabase");
+          syncToSupabase().catch(() => {});
+        }
+      } else if (S.cryptos.length) {
+        // Pas de portfolio en base mais on en a un en local → on push
+        console.log("📤 Push portfolio local vers Supabase");
+        syncToSupabase().catch(() => {});
+      }
+
+    } catch (e) {
+      console.warn("Supabase init sync failed:", e.message);
+      // Pas grave — localStorage est déjà chargé
+    }
   }
 }
+
+// ── Marque la date de dernière modif locale ──
+// Ajoute cette ligne dans save() après localStorage :
+// localStorage.setItem("cn_updated_at", Date.now().toString());
+// (ou remplace save() entièrement par la version ci-dessus)
 
 // ══════════════════════════════════════
 //  NAV
