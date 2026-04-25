@@ -1216,7 +1216,7 @@ async function submitWallet() {
   document.getElementById("w-label").value = "";
   if (okBtn) okBtn.disabled = false;
   closeModal();
-  renderPortfolio();
+fetchCryptoPrices().then(() => renderPortfolio());
 }
 
 function submitManual() {
@@ -1230,7 +1230,8 @@ function submitManual() {
   save();
   ["m-name","m-sym","m-qty","m-price","m-date"].forEach(id => document.getElementById(id).value = "");
   closeModal();
-  renderPortfolio();
+  // ← Force refresh des prix avant d'afficher
+  fetchCryptoPrices().then(() => renderPortfolio());
 }
 
 function deleteCrypto(id) {
