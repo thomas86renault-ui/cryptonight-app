@@ -441,7 +441,7 @@ button,input,select,textarea{font-family:var(--f);border:none;outline:none;backg
             <div class="hero">
               <div class="hero-top">
                 <div>
-                  <div class="hero-ey">Mon portefeuille crypto</div>
+                  <div class="hero-ey">Mon portefeuille crypto <span id="live-badge" style="display:none;margin-left:8px;font-size:8px;padding:2px 7px;border-radius:3px;background:var(--gd);color:var(--green);border:1px solid var(--gb);letter-spacing:.5px">● LIVE</span></div>
                   <div class="hero-val" id="hero-val">—</div>
                   <div class="hero-row">
                     <div class="dpill ft" id="hero-chip">—</div>
@@ -839,15 +839,121 @@ if(tg){tg.ready();tg.expand();}
 const TGU = tg?.initDataUnsafe?.user||{};
 const TID = TGU.id||null;
 
-// Prix simulés (en prod → CoinGecko + Yahoo Finance API)
-const PRICES = {
-  BTC:95200,ETH:2750,SOL:148,BNB:585,XRP:2.05,ADA:.44,MATIC:.72,
+// ══════════════════════════════════════
+//  PRIX LIVE — CoinGecko + Yahoo Finance
+//  Zéro IA, 100% gratuit, refresh 60s
+// ══════════════════════════════════════
+
+// Cache des prix live
+const LIVE = {};
+
+// Mapping symbole → id CoinGecko
+const CG_IDS = {
+  BTC:"bitcoin",ETH:"ethereum",SOL:"solana",BNB:"binancecoin",
+  XRP:"ripple",ADA:"cardano",MATIC:"matic-network",DOT:"polkadot",
+  LINK:"chainlink",AVAX:"avalanche-2",ATOM:"cosmos",UNI:"uniswap",
+  USDT:"tether",USDC:"usd-coin",DAI:"dai",LTC:"litecoin",
+  DOGE:"dogecoin",SHIB:"shiba-inu",TRX:"tron",TON:"the-open-network",
+};
+
+// Fallback si API indisponible
+const FALLBACK = {
+  BTC:95000,ETH:2750,SOL:148,BNB:585,XRP:2.05,ADA:.44,MATIC:.72,
   DOT:7.2,LINK:14.5,AVAX:35,ATOM:8.1,UNI:9.8,USDT:.92,USDC:.92,DAI:.92,
   AAPL:191,TSLA:173,NVDA:875,MSFT:412,AMZN:183,GOOGL:162,META:498,
-  "MC.PA":672,"TTE.PA":58,
-  SPY:515,QQQ:440,IWDA:94,CAC:80,GLD:218,VNQ:85,
+  "MC.PA":672,"TTE.PA":58,SPY:515,QQQ:440,IWDA:94,CAC:80,GLD:218,VNQ:85,
 };
-function price(sym){ return (PRICES[sym.toUpperCase()]||50)*(0.975+Math.random()*.05); }
+
+// Retourne le prix depuis le cache (ou fallback)
+function price(sym){
+  const s=sym.toUpperCase();
+  return LIVE[s] || FALLBACK[s] || 10;
+}
+
+// ── FETCH CRYPTO (CoinGecko) ──
+async function fetchCryptoPrices(){
+  const syms = [...new Set(S.cryptos.map(c=>c.symbol.toUpperCase()))];
+  if(!syms.length) return;
+
+  const ids = syms.map(s=>CG_IDS[s]).filter(Boolean);
+  if(!ids.length) return;
+
+  try{
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=eur`;
+    const res = await fetch(url, {signal:AbortSignal.timeout(8000)});
+    if(!res.ok) return;
+    const data = await res.json();
+
+    // Reverse mapping id → symbol
+    Object.entries(CG_IDS).forEach(([sym,id])=>{
+      if(data[id]?.eur) LIVE[sym]=data[id].eur;
+    });
+    // Stablecoins toujours ~0.92€ (1 USD)
+    ["USDT","USDC","DAI"].forEach(s=>{ if(!LIVE[s]) LIVE[s]=0.92; });
+    console.log("✅ Crypto prices updated from CoinGecko");
+    // Affiche badge LIVE
+    const b=document.getElementById("live-badge");
+    if(b) b.style.display="inline";
+  }catch(e){
+    console.warn("CoinGecko unavailable, using fallback prices");
+  }
+}
+
+// ── FETCH ACTIONS/ETF (Yahoo Finance via proxy CORS) ──
+async function fetchStockPrices(){
+  const allMarket = [
+    ...S.markets.stocks,
+    ...S.markets.etf,
+    ...S.markets.cex,
+  ];
+  const syms = [...new Set(allMarket.map(m=>m.symbol.toUpperCase()))];
+  // Filtre uniquement les non-crypto
+  const stockSyms = syms.filter(s=>!CG_IDS[s]);
+  if(!stockSyms.length) return;
+
+  // Yahoo Finance — on fetch en parallèle (max 5 à la fois)
+  const chunks = [];
+  for(let i=0;i<stockSyms.length;i+=5) chunks.push(stockSyms.slice(i,i+5));
+
+  for(const chunk of chunks){
+    await Promise.allSettled(chunk.map(async sym=>{
+      try{
+        // Yahoo Finance API publique — pas de clé nécessaire
+        const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1d`;
+        const res=await fetch(url,{signal:AbortSignal.timeout(6000)});
+        if(!res.ok) return;
+        const data=await res.json();
+        const rawPrice=data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+        const currency=data?.chart?.result?.[0]?.meta?.currency||"USD";
+        if(!rawPrice) return;
+        // Conversion USD → EUR (taux approximatif, en prod utiliser une API de change)
+        const eurRate = currency==="USD"?0.92:1;
+        LIVE[sym]=rawPrice*eurRate;
+        console.log(`✅ ${sym}: ${(rawPrice*eurRate).toFixed(2)}€`);
+      }catch{
+        // Silencieux — fallback utilisé
+      }
+    }));
+  }
+}
+
+// ── REFRESH TOUTES LES 60 SECONDES ──
+async function refreshAllPrices(){
+  await Promise.all([fetchCryptoPrices(), fetchStockPrices()]);
+  // Recalcule l'affichage avec les nouveaux prix
+  if(S.cryptos.length && document.getElementById("pf-body").style.display!=="none"){
+    renderPortfolio();
+  }
+  if(document.getElementById("page-markets").classList.contains("active")){
+    renderMarkets();
+  }
+}
+
+// Lance le refresh au démarrage puis toutes les 60s
+function startPriceRefresh(){
+  refreshAllPrices();
+  setInterval(refreshAllPrices, 60000);
+}
 
 // ══════════════════════════════════════
 //  STATE
@@ -898,6 +1004,7 @@ function go(name){
 // ══════════════════════════════════════
 function init(){
   load(); applyPlan(); renderPortfolio();
+  startPriceRefresh(); // Prix live dès le démarrage
 }
 
 // ══════════════════════════════════════
@@ -1408,22 +1515,55 @@ function renderAISide(){
 
 async function runAI(){
   const all=[
-    ...S.cryptos.map(a=>({...a,cat:"crypto"})),
-    ...S.markets.stocks.map(a=>({...a,cat:"action"})),
-    ...S.markets.etf.map(a=>({...a,cat:"etf"})),
-    ...S.markets.cex.map(a=>({...a,cat:"crypto plateforme"})),
+    ...S.cryptos.map(a=>({...a,cat:"crypto (wallet)"})),
+    ...S.markets.stocks.map(a=>({...a,cat:"action en bourse"})),
+    ...S.markets.etf.map(a=>({...a,cat:"ETF / fonds"})),
+    ...S.markets.cex.map(a=>({...a,cat:"crypto sur plateforme"})),
   ];
   if(!all.length){alert("Ajoute d'abord des actifs.");return;}
+
   const btn=document.getElementById("ai-btn");
   const ph=document.getElementById("ai-ph");
   const res=document.getElementById("ai-res");
-  btn.disabled=true;btn.textContent="Analyse…";
-  ph.style.display="flex";res.style.display="none";
+  btn.disabled=true; btn.textContent="Analyse…";
+  ph.style.display="flex"; res.style.display="none";
   ph.innerHTML=`<div class="pulse"><span></span><span></span><span></span></div>`;
 
-  const enriched=all.map(a=>{const cp=price(a.symbol);return{...a,cp,val:a.qty*cp,pnl:a.qty*cp-a.qty*a.buyPrice};});
+  // Enrichir avec les prix LIVE
+  const enriched=all.map(a=>{
+    const cp=price(a.symbol);
+    const val=a.qty*cp, cost=a.qty*a.buyPrice;
+    return{...a, cp, val, cost, pnl:val-cost, pct:cost>0?(val-cost)/cost*100:0};
+  });
+
   const totalVal=enriched.reduce((s,a)=>s+a.val,0);
-  const ctx=enriched.map(a=>`${a.name} (${a.symbol}/${a.cat}) : ${a.qty} × ${eur(a.buyPrice)} achat → valeur actuelle ${eur(a.val)} (${a.pnl>=0?"+":""}${eur(a.pnl)})`).join("\n");
+  const totalCost=enriched.reduce((s,a)=>s+a.cost,0);
+  const totalPnl=totalVal-totalCost;
+
+  // Détecte si l'utilisateur a de la crypto ou non
+  const hasCrypto=S.cryptos.length>0||S.markets.cex.length>0;
+  const hasStocks=S.markets.stocks.length>0||S.markets.etf.length>0;
+
+  // Résumé du portfolio par catégorie
+  const bycat={};
+  enriched.forEach(a=>{
+    if(!bycat[a.cat]) bycat[a.cat]={val:0,count:0};
+    bycat[a.cat].val+=a.val; bycat[a.cat].count++;
+  });
+  const catSummary=Object.entries(bycat).map(([cat,d])=>
+    `  - ${cat} : ${d.count} actif(s), valeur ${eur(d.val)} (${Math.round(d.val/totalVal*100)}% du patrimoine)`
+  ).join("\n");
+
+  const detail=enriched.map(a=>
+    `  • ${a.name} (${a.symbol}) [${a.cat}] : ${a.qty%1===0?a.qty:a.qty.toFixed(4)} unités, achat à ${eurFull(a.buyPrice)}, valeur actuelle ${eur(a.val)}, P&L ${a.pnl>=0?"+":""}${eur(a.pnl)} (${a.pct>=0?"+":""}${a.pct.toFixed(1)}%)`
+  ).join("\n");
+
+  // Instruction bonus selon profil
+  const bonusInstruction = !hasCrypto
+    ? `\n**💡 Opportunité crypto** — Cet utilisateur n'a pas de crypto. Donne-lui 1 conseil simple sur comment commencer (ex: petit investissement en BTC ou ETH crypto), sans pression, juste une info utile.`
+    : !hasStocks
+    ? `\n**📈 Diversification bourse** — Cet utilisateur n'a que de la crypto. Suggère-lui d'envisager 1 ETF simple (ex: S&P 500) pour diversifier, en 1-2 phrases simples.`
+    : "";
 
   try{
     const r=await fetch("https://api.anthropic.com/v1/messages",{
@@ -1432,29 +1572,45 @@ async function runAI(){
       body:JSON.stringify({
         model:"claude-sonnet-4-20250514",
         max_tokens:1000,
-        messages:[{role:"user",content:`Tu es un conseiller en gestion de patrimoine de CryptoNight. Analyse ce portefeuille en français, de façon directe, simple à comprendre, avec des conseils concrets.
+        messages:[{role:"user",content:`Tu es un conseiller en gestion de patrimoine pour CryptoNight. Tu analyses le patrimoine COMPLET de cet utilisateur (crypto ET actions ET ETF), pas uniquement la crypto.
 
-Patrimoine total : ${eur(totalVal)}
-Composition :
-${ctx}
+Parle en français, de façon directe et simple. Comme un ami qui s'y connaît, pas un robot.
 
-Fournis en markdown :
-**📊 Analyse rapide** — 2-3 phrases simples sur la composition et la diversification
-**✅ Points forts** — 2-3 points positifs de ce portfolio
-**⚠️ Points d'attention** — 2-3 risques ou déséquilibres à corriger
-**🎯 Ce que je ferais cette semaine** — 1 action concrète et précise
+═══ PATRIMOINE TOTAL : ${eur(totalVal)} ═══
+P&L global : ${totalPnl>=0?"+":""}${eur(totalPnl)} (${totalPnl>=0?"+":""}${((totalPnl/totalCost)*100).toFixed(1)}%)
 
-Sois comme un ami qui comprend la finance, pas un robot. Max 300 mots. Utilise des emojis.`}]
+Répartition par catégorie :
+${catSummary}
+
+Détail des positions :
+${detail}
+
+Fournis une analyse structurée en markdown :
+
+**📊 Vue d'ensemble** — 2-3 phrases sur la composition globale et la diversification de ce patrimoine
+
+**✅ Points forts** — 2-3 éléments positifs concrets (cite les actifs par nom)
+
+**⚠️ Points d'attention** — 2-3 risques ou déséquilibres à corriger (sois précis)
+
+**🎯 Action de la semaine** — 1 seule action concrète, précise, réalisable maintenant
+${bonusInstruction}
+
+Maximum 320 mots. Utilise les vrais noms des actifs. Sois direct.`}]
       })
     });
     const d=await r.json();
-    const txt=d.content?.[0]?.text||"Erreur.";
-    ph.style.display="none";res.style.display="block";
-    res.innerHTML=txt.replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>").replace(/\*(.*?)\*/g,"<em>$1</em>").replace(/\n/g,"<br>");
-  }catch{
-    ph.innerHTML=`<span style="color:var(--txt3);font-size:13px">Erreur de connexion. Réessaie.</span>`;
+    const txt=d.content?.[0]?.text||"Erreur lors de l'analyse.";
+    ph.style.display="none"; res.style.display="block";
+    res.innerHTML=txt
+      .replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>")
+      .replace(/\*(.*?)\*/g,"<em>$1</em>")
+      .replace(/^#{1,3} (.+)$/gm,"<strong>$1</strong>")
+      .replace(/\n/g,"<br>");
+  }catch(e){
+    ph.innerHTML=`<span style="color:var(--txt3);font-size:13px">Erreur de connexion. Réessaie dans quelques secondes.</span>`;
   }
-  btn.disabled=false;btn.textContent="Analyser →";
+  btn.disabled=false; btn.textContent="Analyser →";
 }
 
 // ══════════════════════════════════════
