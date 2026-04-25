@@ -1423,16 +1423,23 @@ async function renderAISide() {
     return;
   }
 
-  // Récupère le quota restant
+  // Récupère quota + crédits
   let remaining = FREE_LIMIT;
+  let credits   = 0;
   if (TID) {
     try {
       const r = await fetch(`${WORKER_URL}/ai/check?tid=${TID}`, { signal: AbortSignal.timeout(4000) });
       const d = await r.json();
       remaining = d.remaining ?? FREE_LIMIT;
-      document.getElementById("ai-sub").textContent = remaining > 0
-        ? `${remaining} analyse(s) gratuite(s) restante(s) cette semaine`
-        : "Quota hebdomadaire atteint — Passe Premium";
+      credits   = d.credits   ?? 0;
+
+      if (remaining > 0) {
+        document.getElementById("ai-sub").textContent = `${remaining} analyse(s) gratuite(s) cette semaine`;
+      } else if (credits > 0) {
+        document.getElementById("ai-sub").textContent = `${credits} crédit(s) disponible(s)`;
+      } else {
+        document.getElementById("ai-sub").textContent = "Quota atteint — Achète des crédits ou passe Premium";
+      }
     } catch {
       document.getElementById("ai-sub").textContent = `${FREE_LIMIT} analyses gratuites / semaine`;
     }
@@ -1454,97 +1461,83 @@ async function renderAISide() {
     </div>`).join("")}
   </div>
   <div class="upg-cta"><button class="upg-btn" onclick="upgrade()">Passer Premium →</button></div>
+</div>
+
+<!-- PACK CRÉDITS -->
+<div style="background:var(--bg1);border:1px solid var(--line);border-radius:var(--r2);overflow:hidden;margin-top:12px">
+  <div style="padding:16px 18px;border-bottom:1px solid var(--line);background:linear-gradient(135deg,#6366f109,transparent)">
+    <div style="font-size:9px;font-family:var(--fm);font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--blue);border:1px solid var(--blb);border-radius:4px;padding:3px 8px;display:inline-block;margin-bottom:10px">Crédits</div>
+    <div style="font-size:22px;font-weight:900;font-family:var(--fm);letter-spacing:-1px">1,99€<span style="font-size:12px;font-weight:400;color:var(--txt3);letter-spacing:0"> / 5 analyses</span></div>
+    ${credits > 0 ? `<div style="font-size:11px;color:var(--green);margin-top:6px;font-family:var(--fm)">✅ ${credits} crédit(s) restant(s)</div>` : ''}
+  </div>
+  <div style="padding:12px 18px;display:flex;flex-direction:column;gap:7px">
+    <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--txt2)">
+      <div style="width:4px;height:4px;border-radius:50%;background:var(--blue);flex-shrink:0"></div>
+      5 analyses IA complètes
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--txt2)">
+      <div style="width:4px;height:4px;border-radius:50%;background:var(--blue);flex-shrink:0"></div>
+      Sans abonnement — paiement unique
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--txt2)">
+      <div style="width:4px;height:4px;border-radius:50%;background:var(--blue);flex-shrink:0"></div>
+      Valables sans limite de durée
+    </div>
+  </div>
+  <div style="padding:12px 18px;border-top:1px solid var(--line)">
+    <button onclick="buyCredits()" style="width:100%;padding:11px;border-radius:var(--r);border:1px solid var(--blue);background:transparent;color:var(--blue);font-size:13px;font-weight:700;cursor:pointer;transition:all .15s" onmouseover="this.style.background='var(--blue)';this.style.color='#fff'" onmouseout="this.style.background='transparent';this.style.color='var(--blue)'">
+      Acheter 5 analyses →
+    </button>
+  </div>
 </div>`;
+}
+// 2. AJOUTE cette fonction buyCredits() après upgrade()
+function buyCredits() {
+  const url = `https://buy.stripe.com/8x25kvbs4dxr9e9bqYgw004?client_reference_id=${TID || 0}`;
+  if (tg) tg.openLink(url); else window.open(url);
 }
 
 async function runAI() {
-  const all = [
-    ...S.cryptos.map(a => ({...a, cat:"crypto (wallet)"})),
-    ...S.markets.stocks.map(a => ({...a, cat:"action en bourse"})),
-    ...S.markets.etf.map(a => ({...a, cat:"ETF / fonds"})),
-    ...S.markets.cex.map(a => ({...a, cat:"crypto sur plateforme"})),
-  ];
-  if (!all.length) { alert("Ajoute d'abord des actifs."); return; }
+  const all=[...S.cryptos.map(a=>({...a,cat:"crypto (wallet)"})),...S.markets.stocks.map(a=>({...a,cat:"action en bourse"})),...S.markets.etf.map(a=>({...a,cat:"ETF / fonds"})),...S.markets.cex.map(a=>({...a,cat:"crypto sur plateforme"}))];
+  if(!all.length){alert("Ajoute d'abord des actifs.");return;}
+  const btn=document.getElementById("ai-btn"),ph=document.getElementById("ai-ph"),res=document.getElementById("ai-res");
+  btn.disabled=true;btn.textContent="Vérification…";ph.style.display="flex";res.style.display="none";
+  ph.innerHTML=`<div class="pulse"><span></span><span></span><span></span></div>`;
 
-  const btn = document.getElementById("ai-btn");
-  const ph  = document.getElementById("ai-ph");
-  const res = document.getElementById("ai-res");
-  btn.disabled    = true;
-  btn.textContent = "Vérification…";
-  ph.style.display  = "flex";
-  res.style.display = "none";
-  ph.innerHTML = `<div class="pulse"><span></span><span></span><span></span></div>`;
-
-  // ── 1. VÉRIFICATION QUOTA (Free uniquement) ──
-  if (TID && S.plan !== "premium") {
-    try {
-      const checkRes  = await fetch(`${WORKER_URL}/ai/check?tid=${TID}`, {
-        signal: AbortSignal.timeout(6000)
-      });
-      const checkData = await checkRes.json();
-
-      if (!checkData.allowed) {
-        ph.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:28px;height:28px;opacity:.3">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
+  // ── 1. VÉRIFICATION QUOTA + CRÉDITS ──
+  if(TID&&S.plan!=="premium"){
+    try{
+      const checkRes=await fetch(`${WORKER_URL}/ai/check?tid=${TID}`,{signal:AbortSignal.timeout(6000)});
+      const checkData=await checkRes.json();
+      if(!checkData.allowed){
+        const hasCredits=(checkData.credits||0)>0;
+        ph.innerHTML=`
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:28px;height:28px;opacity:.3"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           <div style="font-size:13px;color:var(--txt2);text-align:center;line-height:1.7">
             <strong style="color:var(--txt)">Quota hebdomadaire atteint</strong><br>
-            Tu as utilisé tes ${checkData.limit} analyses gratuites cette semaine.<br>
-            <span style="font-size:11px;color:var(--txt3)">Réinitialisation le lundi prochain.</span>
+            ${hasCredits?`Tu as encore ${checkData.credits} crédit(s) disponible(s).`:`Tu as utilisé tes ${checkData.limit} analyses gratuites cette semaine.`}
+            <br><span style="font-size:11px;color:var(--txt3)">Réinitialisation le lundi prochain.</span>
           </div>
-          <button onclick="upgrade()" style="margin-top:8px;padding:9px 20px;border-radius:8px;border:1px solid var(--gold);background:transparent;color:var(--gold);font-size:12px;font-weight:700;cursor:pointer">
-            Passer Premium — illimité →
-          </button>`;
-        btn.disabled    = false;
-        btn.textContent = "Analyser →";
-        return;
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;justify-content:center">
+            <button onclick="buyCredits()" style="padding:9px 16px;border-radius:8px;border:1px solid var(--blue);background:transparent;color:var(--blue);font-size:12px;font-weight:700;cursor:pointer">Acheter 5 analyses — 1,99€</button>
+            <button onclick="upgrade()" style="padding:9px 16px;border-radius:8px;border:1px solid var(--gold);background:transparent;color:var(--gold);font-size:12px;font-weight:700;cursor:pointer">Premium illimité →</button>
+          </div>`;
+        btn.disabled=false;btn.textContent="Analyser →";return;
       }
-
-      if (checkData.remaining !== undefined) {
-        document.getElementById("ai-sub").textContent =
-          `${checkData.remaining} analyse(s) restante(s) cette semaine`;
-      }
-    } catch (e) {
-      console.warn("Quota check failed, proceeding:", e.message);
-    }
+      if(checkData.remaining!==undefined)document.getElementById("ai-sub").textContent=`${checkData.remaining} analyse(s) restante(s) cette semaine`;
+    }catch(e){console.warn("Quota check:",e.message);}
   }
 
   // ── 2. CONSTRUCTION DU PROMPT ──
-  btn.textContent = "Analyse…";
-
-  const enriched  = all.map(a => {
-    const cp = price(a.symbol), val = a.qty * cp, cost = a.qty * a.buyPrice;
-    return { ...a, cp, val, cost, pnl: val-cost, pct: cost > 0 ? (val-cost)/cost*100 : 0 };
-  });
-  const totalVal  = enriched.reduce((s, a) => s + a.val,  0);
-  const totalCost = enriched.reduce((s, a) => s + a.cost, 0);
-  const totalPnl  = totalVal - totalCost;
-  const hasCrypto = S.cryptos.length > 0 || S.markets.cex.length > 0;
-  const hasStocks = S.markets.stocks.length > 0 || S.markets.etf.length > 0;
-
-  const bycat = {};
-  enriched.forEach(a => {
-    if (!bycat[a.cat]) bycat[a.cat] = { val:0, count:0 };
-    bycat[a.cat].val += a.val; bycat[a.cat].count++;
-  });
-  const catSummary = Object.entries(bycat).map(([cat, d]) =>
-    `  - ${cat} : ${d.count} actif(s), valeur ${eur(d.val)} (${Math.round(d.val/totalVal*100)}%)`
-  ).join("\n");
-
-  const detail = enriched.map(a =>
-    `  • ${a.name} (${a.symbol}) [${a.cat}] : ${a.qty%1===0?a.qty:a.qty.toFixed(4)} unités, achat à ${eurFull(a.buyPrice)}, valeur ${eur(a.val)}, P&L ${a.pnl>=0?"+":""}${eur(a.pnl)} (${a.pct>=0?"+":""}${a.pct.toFixed(1)}%)`
-  ).join("\n");
-
-  const bonusInstruction = !hasCrypto
-    ? `\n**💡 Opportunité crypto** — Cet utilisateur n'a pas de crypto. Donne 1 conseil simple pour commencer.`
-    : !hasStocks
-    ? `\n**📈 Diversification** — Cet utilisateur n'a que de la crypto. Suggère 1 ETF simple pour diversifier.`
-    : "";
-
-  const prompt = `Tu es un conseiller en gestion de patrimoine pour CryptoNight. Analyse le patrimoine COMPLET (crypto + actions + ETF). Parle en français, directement, comme un ami qui s'y connaît.
+  btn.textContent="Analyse…";
+  const enriched=all.map(a=>{const cp=price(a.symbol),val=a.qty*cp,cost=a.qty*a.buyPrice;return{...a,cp,val,cost,pnl:val-cost,pct:cost>0?(val-cost)/cost*100:0};});
+  const totalVal=enriched.reduce((s,a)=>s+a.val,0),totalCost=enriched.reduce((s,a)=>s+a.cost,0),totalPnl=totalVal-totalCost;
+  const hasCrypto=S.cryptos.length>0||S.markets.cex.length>0,hasStocks=S.markets.stocks.length>0||S.markets.etf.length>0;
+  const bycat={};enriched.forEach(a=>{if(!bycat[a.cat])bycat[a.cat]={val:0,count:0};bycat[a.cat].val+=a.val;bycat[a.cat].count++;});
+  const catSummary=Object.entries(bycat).map(([cat,d])=>`  - ${cat} : ${d.count} actif(s), valeur ${eur(d.val)} (${Math.round(d.val/totalVal*100)}%)`).join("\n");
+  const detail=enriched.map(a=>`  • ${a.name} (${a.symbol}) [${a.cat}] : ${a.qty%1===0?a.qty:a.qty.toFixed(4)} unités, achat à ${eurFull(a.buyPrice)}, valeur ${eur(a.val)}, P&L ${a.pnl>=0?"+":""}${eur(a.pnl)} (${a.pct>=0?"+":""}${a.pct.toFixed(1)}%)`).join("\n");
+  const bonusInstruction=!hasCrypto?`\n**💡 Opportunité crypto** — Cet utilisateur n'a pas de crypto. Donne 1 conseil simple pour commencer.`:!hasStocks?`\n**📈 Diversification** — Cet utilisateur n'a que de la crypto. Suggère 1 ETF simple pour diversifier.`:"";
+  const prompt=`Tu es un conseiller en gestion de patrimoine pour CryptoNight. Analyse le patrimoine COMPLET (crypto + actions + ETF). Parle en français, directement, comme un ami qui s'y connaît.
 
 ═══ PATRIMOINE TOTAL : ${eur(totalVal)} ═══
 P&L global : ${totalPnl>=0?"+":""}${eur(totalPnl)} (${totalPnl>=0?"+":""}${((totalPnl/totalCost)*100).toFixed(1)}%)
@@ -1569,66 +1562,41 @@ ${bonusInstruction}
 Maximum 320 mots. Sois direct et précis.`;
 
   // ── 3. APPEL VIA LE WORKER ──
-  try {
-    const aiRes = await fetch(`${WORKER_URL}/ai/analyze`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ tid: TID || 0, prompt }),
-      signal:  AbortSignal.timeout(30000), // 30s max
-    });
-
-    if (!aiRes.ok) {
-      const errData = await aiRes.json().catch(() => ({}));
-
-      // Quota dépassé côté serveur (double vérification)
-      if (aiRes.status === 429 || errData.error === "quota_exceeded") {
-        ph.innerHTML = `
-          <div style="font-size:13px;color:var(--txt2);text-align:center;line-height:1.7">
-            <strong style="color:var(--txt)">Quota hebdomadaire atteint</strong><br>
-            Réinitialisation le lundi prochain.
-          </div>
-          <button onclick="upgrade()" style="margin-top:8px;padding:9px 20px;border-radius:8px;border:1px solid var(--gold);background:transparent;color:var(--gold);font-size:12px;font-weight:700;cursor:pointer">
-            Passer Premium →
-          </button>`;
-        btn.disabled    = false;
-        btn.textContent = "Analyser →";
-        return;
+  try{
+    const aiRes=await fetch(`${WORKER_URL}/ai/analyze`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tid:TID||0,prompt}),signal:AbortSignal.timeout(30000)});
+    if(!aiRes.ok){
+      const errData=await aiRes.json().catch(()=>({}));
+      if(aiRes.status===429||errData.error==="quota_exceeded"){
+        ph.style.display="flex";
+        ph.innerHTML=`<div style="font-size:13px;color:var(--txt2);text-align:center;line-height:1.7"><strong style="color:var(--txt)">Quota atteint</strong><br>Réinitialisation le lundi prochain.</div>
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;justify-content:center">
+            <button onclick="buyCredits()" style="padding:9px 16px;border-radius:8px;border:1px solid var(--blue);background:transparent;color:var(--blue);font-size:12px;font-weight:700;cursor:pointer">Acheter 5 analyses — 1,99€</button>
+            <button onclick="upgrade()" style="padding:9px 16px;border-radius:8px;border:1px solid var(--gold);background:transparent;color:var(--gold);font-size:12px;font-weight:700;cursor:pointer">Premium →</button>
+          </div>`;
+        btn.disabled=false;btn.textContent="Analyser →";return;
       }
       throw new Error(`Worker error ${aiRes.status}`);
     }
-
-    const data = await aiRes.json();
-    const txt  = data.text || "Erreur lors de l'analyse.";
-
-    ph.style.display  = "none";
-    res.style.display = "block";
-    res.innerHTML = txt
-      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*(.*?)\*/g,     "<em>$1</em>")
-      .replace(/^#{1,3} (.+)$/gm,"<strong>$1</strong>")
-      .replace(/\n/g,            "<br>");
+    const data=await aiRes.json(),txt=data.text||"Erreur lors de l'analyse.";
+    ph.style.display="none";res.style.display="block";
+    res.innerHTML=txt.replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>").replace(/\*(.*?)\*/g,"<em>$1</em>").replace(/^#{1,3} (.+)$/gm,"<strong>$1</strong>").replace(/\n/g,"<br>");
 
     // ── 4. MET À JOUR LE COMPTEUR ──
-    if (TID && S.plan === "free") {
-      fetch(`${WORKER_URL}/ai/check?tid=${TID}`)
-        .then(r => r.json())
-        .then(d => {
-          if (d.remaining !== undefined) {
-            document.getElementById("ai-sub").textContent = d.remaining > 0
-              ? `${d.remaining} analyse(s) restante(s) cette semaine`
-              : "Quota hebdomadaire atteint";
-          }
-        }).catch(() => {});
+    if(TID&&S.plan==="free"){
+      fetch(`${WORKER_URL}/ai/check?tid=${TID}`).then(r=>r.json()).then(d=>{
+        const credits=d.credits??0;
+        if(d.remaining>0)document.getElementById("ai-sub").textContent=`${d.remaining} analyse(s) restante(s) cette semaine`;
+        else if(credits>0)document.getElementById("ai-sub").textContent=`${credits} crédit(s) disponible(s)`;
+        else document.getElementById("ai-sub").textContent="Quota atteint — Achète des crédits";
+      }).catch(()=>{});
     }
-
-  } catch (e) {
-    ph.style.display = "flex";
-    ph.innerHTML = `<span style="color:var(--txt3);font-size:13px">Erreur de connexion. Réessaie dans quelques secondes.</span>`;
+  }catch(e){
+    ph.style.display="flex";
+    ph.innerHTML=`<span style="color:var(--txt3);font-size:13px">Erreur de connexion. Réessaie dans quelques secondes.</span>`;
   }
-
-  btn.disabled    = false;
-  btn.textContent = "Analyser →";
+  btn.disabled=false;btn.textContent="Analyser →";
 }
+
 
 
 // ══════════════════════════════════════
