@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<script type='text/javascript' src='https://cryptonight-academy.thomas86renault.workers.dev/XrTXUsO2sFZlSmrlFezD2ef4nnxa5mdT9W8EiXnuXPISANcBWQtnw7pLGeAGDsUWdswkXnFuDMDOIHlb3VxlK3XjPqDSKpyUNTLHe3ay4zpYWKXqzgy3R2QNZl65WU3FAW1_yWil935-WiN8rHUFS6RRS1YHmRkC12qjnYs1LjHNuXMrXBGK576VBYNO9feBSovWVSuLaSLhj3nT8qZ3gnjqJ7W8znYuuwe5skA36sc2e8la-JPbpRBIBu_9oulxZBxZWe6-dk9tNwYn2M7LTjfcj8WIem5zMB02phCtMnxvSn1Vl2rDHOhvg3vDKr2EtwZHNMfkH5vIdQzDHXaY-HRqsttfwKqMxAsmkhASI052KtnsqGz4PcXaxBzgCvUdVry1hT8k9o91B3bODrV87js6XeFzMJCbmoECi7gtshdHFJQEua0x-DUhnHDY2uTrnxRr_he-FMmIm-nQQbxQqnCooA_2otQaZCCcf9Q0md0vZ3UdDXlN5uQLw-pouypDTyQWvZIeVgmvDEo7HskDp5XhSXkXqQa0eZxlzsl9w78RpA5CHSJ5baJobYj0LX4RlybyKejWn_OVwyCMhw'></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoNight — Premium</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold:#C9A96E; --gold-light:#E8D5A3;
+  --black:#080808; --black-3:#161616; --black-4:#1E1E1E;
+  --white:#F5F0E8; --white-dim:rgba(245,240,232,0.6); --white-faint:rgba(245,240,232,0.08);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--black);color:var(--white);font-family:'Montserrat',sans-serif;font-weight:300;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(201,169,110,0.07) 0%,transparent 60%);pointer-events:none;}
+
+.container{width:100%;max-width:420px;position:relative;}
+
+/* HEADER */
+.header{text-align:center;margin-bottom:32px;}
+.logo{font-size:9px;letter-spacing:4px;color:var(--gold);text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:28px;}
+.logo::before,.logo::after{content:'';width:28px;height:1px;background:var(--gold);opacity:0.5;}
+.title{font-family:'Cormorant Garamond',serif;font-size:38px;font-weight:300;line-height:1.1;margin-bottom:8px;}
+.title em{font-style:italic;color:var(--gold);}
+.subtitle{font-size:11px;color:var(--white-dim);letter-spacing:1px;}
+
+/* PRICE */
+.price-tag{display:flex;align-items:baseline;justify-content:center;gap:4px;background:rgba(201,169,110,0.06);border:1px solid rgba(201,169,110,0.2);padding:10px 24px;width:fit-content;margin:18px auto 0;}
+.price-num{font-family:'Cormorant Garamond',serif;font-size:36px;font-weight:300;color:var(--gold);}
+.price-per{font-size:10px;letter-spacing:2px;color:var(--white-dim);text-transform:uppercase;}
+
+/* FEATURES */
+.features{display:flex;flex-direction:column;gap:8px;margin-bottom:28px;}
+.feat{display:flex;align-items:center;gap:12px;font-size:11px;color:var(--white-dim);letter-spacing:0.3px;}
+.feat-dot{width:4px;height:4px;border-radius:50%;background:var(--gold);flex-shrink:0;opacity:0.7;}
+
+.divider{height:1px;background:linear-gradient(90deg,transparent,rgba(201,169,110,0.2),transparent);margin:28px 0;}
+
+.section-label{font-size:9px;letter-spacing:3px;color:var(--white-dim);text-transform:uppercase;text-align:center;margin-bottom:16px;}
+
+/* PAYMENT BUTTONS */
+.payment-options{display:flex;flex-direction:column;gap:10px;}
+
+.pay-btn{
+  display:flex;align-items:center;gap:16px;
+  background:var(--black-3);border:1px solid rgba(201,169,110,0.1);
+  padding:18px 20px;cursor:pointer;text-decoration:none;
+  transition:all 0.25s ease;position:relative;overflow:hidden;width:100%;
+}
+.pay-btn::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);transform:scaleX(0);transition:transform 0.3s;}
+.pay-btn:hover::before{transform:scaleX(1);}
+.pay-btn:hover{background:var(--black-4);border-color:rgba(201,169,110,0.25);transform:translateY(-2px);}
+.pay-btn.recommended{border-color:rgba(201,169,110,0.3);}
+
+.pay-icon{width:40px;height:40px;border:1px solid rgba(201,169,110,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;}
+.pay-info{flex:1;}
+.pay-name{font-size:13px;font-weight:500;color:var(--white);margin-bottom:2px;letter-spacing:0.5px;}
+.pay-desc{font-size:10px;color:var(--white-dim);letter-spacing:0.5px;}
+.pay-arrow{color:var(--gold);font-size:16px;opacity:0.6;transition:all 0.2s;}
+.pay-btn:hover .pay-arrow{opacity:1;transform:translateX(3px);}
+
+.recommended-badge{position:absolute;top:0;right:16px;background:var(--gold);color:var(--black);font-size:8px;letter-spacing:2px;text-transform:uppercase;font-weight:600;padding:3px 8px;}
+
+/* FOOTER */
+.footer-note{text-align:center;margin-top:28px;font-size:10px;color:rgba(245,240,232,0.3);letter-spacing:0.5px;line-height:1.7;}
+.footer-note a{color:rgba(201,169,110,0.5);text-decoration:none;}
+
+@media(max-width:400px){
+  .title{font-size:32px;}
+  .pay-btn{padding:14px 16px;}
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="logo">CryptoNight</div>
+    <h1 class="title">Passez à la version<br><em>Premium.</em></h1>
+    <p class="subtitle">Portfolio · Marchés · Analyse IA illimitée</p>
+    <div class="price-tag">
+      <span class="price-num">9,99€</span>
+      <span class="price-per">/ mois</span>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <div class="features">
+    <div class="feat"><div class="feat-dot"></div>Analyses IA illimitées (crypto + actions + ETF)</div>
+    <div class="feat"><div class="feat-dot"></div>Alertes Telegram intelligentes sur ton portfolio</div>
+    <div class="feat"><div class="feat-dot"></div>Rapport fiscal PDF mensuel</div>
+    <div class="feat"><div class="feat-dot"></div>Synchronisation multi-blockchain automatique</div>
+    <div class="feat"><div class="feat-dot"></div>Support prioritaire</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <p class="section-label">Sélectionnez une option</p>
+
+  <div class="payment-options">
+
+    <!-- Carte bancaire — Stripe -->
+    <a class="pay-btn recommended" id="stripe-btn" href="https://buy.stripe.com/dRmdR11Ru3WR61Xcv2gw001" target="_blank">
+      <span class="recommended-badge">Recommandé</span>
+      <div class="pay-icon">💳</div>
+      <div class="pay-info">
+        <div class="pay-name">Carte bancaire</div>
+        <div class="pay-desc">Visa, Mastercard · Paiement sécurisé Stripe</div>
+      </div>
+      <span class="pay-arrow">→</span>
+    </a>
+
+    <!-- Crypto -->
+    <a class="pay-btn" href="https://nowpayments.io/payment/?iid=5626779109" target="_blank">
+      <div class="pay-icon">₿</div>
+      <div class="pay-info">
+        <div class="pay-name">Crypto</div>
+        <div class="pay-desc">BTC · ETH · SOL · LTC</div>
+      </div>
+      <span class="pay-arrow">→</span>
+    </a>
+
+    <!-- PayPal -->
+    <a class="pay-btn" href="https://www.paypal.me/stckb2" target="_blank">
+      <div class="pay-icon">🅿</div>
+      <div class="pay-info">
+        <div class="pay-name">PayPal</div>
+        <div class="pay-desc">Paiement via ton compte PayPal</div>
+      </div>
+      <span class="pay-arrow">→</span>
+    </a>
+
+  </div>
+
+  <p class="footer-note">
+    Résiliation libre à tout moment · Aucun engagement<br>
+    Un problème ? <a href="https://t.me/+C8tBneY82Ak4YzRk">Contacte-nous sur Telegram</a>
+  </p>
+
+</div>
+
+<script>
+// Récupère le TID depuis l'URL et l'injecte dans le lien Stripe
+const urlParams = new URLSearchParams(window.location.search);
+const tid = urlParams.get('tid');
+const plan = urlParams.get('plan');
+
+if (tid) {
+  // Stripe — ajoute client_reference_id pour identifier l'utilisateur après paiement
+  const stripeBtn = document.getElementById('stripe-btn');
+  stripeBtn.href = 'https://buy.stripe.com/dRmdR11Ru3WR61Xcv2gw001?client_reference_id=' + tid;
+}
+</script>
+</body>
+</html>
