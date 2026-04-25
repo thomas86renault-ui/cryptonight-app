@@ -736,11 +736,16 @@ async function fetchStockPrices() {
 
 async function fetchWalletBalances(address, chain) {
   try {
-    const res  = await fetch(`${WORKER_URL}/wallet?address=${encodeURIComponent(address)}&chain=${chain}`, { signal: AbortSignal.timeout(12000) });
+    const res = await fetch(`${WORKER_URL}/wallet?address=${encodeURIComponent(address)}&chain=${chain}`, 
+      { signal: AbortSignal.timeout(20000) }  // ← 20 secondes au lieu de 12
+    );
     if (!res.ok) throw new Error(`Worker error ${res.status}`);
     const data = await res.json();
     return data.tokens || [];
-  } catch (e) { console.warn("Wallet fetch error:", e.message); return null; }
+  } catch (e) { 
+    console.warn("Wallet fetch error:", e.message); 
+    return null; 
+  }
 }
 
 async function refreshAllPrices() {
