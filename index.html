@@ -1286,13 +1286,44 @@ async function submitWallet() {
     await sleep(1500);
   }
 
-  scanBox.classList.remove("show");
+ scanBox.classList.remove("show");
   scanTxt.style.color = "";
   document.getElementById("w-addr").value  = "";
   document.getElementById("w-label").value = "";
   if (okBtn) okBtn.disabled = false;
   closeModal();
   renderPortfolio();
+}
+
+function submitManual() {
+  const name  = document.getElementById("m-name").value.trim();
+  const sym   = document.getElementById("m-sym").value.trim().toUpperCase();
+  const qty   = parseFloat(document.getElementById("m-qty").value);
+  const bp    = parseFloat(document.getElementById("m-price").value);
+  const date  = document.getElementById("m-date").value;
+  if (!name || !sym || isNaN(qty) || qty <= 0 || isNaN(bp) || bp <= 0) { alert("Remplis tous les champs."); return; }
+  S.cryptos.push({
+    id:      Date.now().toString() + Math.floor(Math.random() * 10000),
+    name, symbol:sym, qty, buyPrice:bp,
+    buyDate: date || new Date().toISOString().split("T")[0],
+    source:  "manual"
+  });
+  save();
+  ["m-name","m-sym","m-qty","m-price","m-date"].forEach(id => document.getElementById(id).value = "");
+  closeModal();
+  fetchCryptoPrices().then(() => renderPortfolio());
+}
+
+function deleteCrypto(id) {
+  if (!confirm("Supprimer cette crypto ?")) return;
+  S.cryptos = S.cryptos.filter(c => c.id !== id);
+  save(); renderPortfolio();
+}
+
+function deleteMarket(section, id) {
+  if (!confirm("Supprimer ?")) return;
+  S.markets[section] = S.markets[section].filter(m => m.id !== id);
+  save(); renderMarkets();
 }
 
 // ══════════════════════════════════════
