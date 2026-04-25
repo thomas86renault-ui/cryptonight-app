@@ -1149,7 +1149,7 @@ function qcFill(name, sym) {
 }
 
 async function submitWallet() {
-  const addr  = document.getElementById("w-addr").value.trim().replace(/\s+/g, '').replace(/[^\x20-\x7E]/g, '');
+ const addr = document.getElementById("w-addr").value.trim().replace(/\s/g, '');
   const label = document.getElementById("w-label").value.trim();
   if (!addr) { alert("Entre une adresse publique."); return; }
   const scanBox  = document.getElementById("scan-box");
