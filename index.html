@@ -840,100 +840,103 @@ const TGU = tg?.initDataUnsafe?.user||{};
 const TID = TGU.id||null;
 
 // ══════════════════════════════════════
-//  PRIX LIVE — CoinGecko + Yahoo Finance
+//  PRIX LIVE — via Cloudflare Worker
+//  worker.js déployé sur cryptonight-api.workers.dev
 //  Zéro IA, 100% gratuit, refresh 60s
 // ══════════════════════════════════════
 
-// Cache des prix live
+// ← Mets ici l'URL de ton Worker après déploiement
+const WORKER_URL = "https://cryptonight-api.TON-COMPTE.workers.dev";
+
+// Cache des prix live { SYM: { eur, change } }
 const LIVE = {};
 
-// Mapping symbole → id CoinGecko
-const CG_IDS = {
-  BTC:"bitcoin",ETH:"ethereum",SOL:"solana",BNB:"binancecoin",
-  XRP:"ripple",ADA:"cardano",MATIC:"matic-network",DOT:"polkadot",
-  LINK:"chainlink",AVAX:"avalanche-2",ATOM:"cosmos",UNI:"uniswap",
-  USDT:"tether",USDC:"usd-coin",DAI:"dai",LTC:"litecoin",
-  DOGE:"dogecoin",SHIB:"shiba-inu",TRX:"tron",TON:"the-open-network",
-};
-
-// Fallback si API indisponible
+// Fallback si Worker indisponible
 const FALLBACK = {
-  BTC:95000,ETH:2750,SOL:148,BNB:585,XRP:2.05,ADA:.44,MATIC:.72,
-  DOT:7.2,LINK:14.5,AVAX:35,ATOM:8.1,UNI:9.8,USDT:.92,USDC:.92,DAI:.92,
-  AAPL:191,TSLA:173,NVDA:875,MSFT:412,AMZN:183,GOOGL:162,META:498,
-  "MC.PA":672,"TTE.PA":58,SPY:515,QQQ:440,IWDA:94,CAC:80,GLD:218,VNQ:85,
+  BTC:95000,ETH:2350,SOL:145,BNB:580,XRP:2.0,ADA:.43,MATIC:.70,
+  DOT:7.0,LINK:14.0,AVAX:34,ATOM:8.0,UNI:9.5,USDT:.92,USDC:.92,DAI:.92,
+  DOGE:.14,SHIB:.000018,LTC:78,TRX:.11,
+  AAPL:188,TSLA:170,NVDA:860,MSFT:408,AMZN:180,GOOGL:160,META:490,
+  "MC.PA":668,"TTE.PA":57,SPY:510,QQQ:435,IWDA:93,CAC:79,GLD:215,VNQ:84,
 };
 
-// Retourne le prix depuis le cache (ou fallback)
+// Retourne le prix € depuis le cache ou fallback
 function price(sym){
-  const s=sym.toUpperCase();
-  return LIVE[s] || FALLBACK[s] || 10;
+  const s = sym.toUpperCase();
+  return LIVE[s]?.eur ?? FALLBACK[s] ?? 10;
 }
 
-// ── FETCH CRYPTO (CoinGecko) ──
+// Retourne la variation 24h
+function priceChange(sym){
+  return LIVE[sym.toUpperCase()]?.change ?? 0;
+}
+
+// ── FETCH TOUTES LES CRYPTOS ──
 async function fetchCryptoPrices(){
-  const syms = [...new Set(S.cryptos.map(c=>c.symbol.toUpperCase()))];
+  const allCryptoSyms = [
+    ...S.cryptos.map(c=>c.symbol),
+    ...S.markets.cex.map(c=>c.symbol),
+  ];
+  const syms = [...new Set(allCryptoSyms.map(s=>s.toUpperCase()))];
   if(!syms.length) return;
 
-  const ids = syms.map(s=>CG_IDS[s]).filter(Boolean);
-  if(!ids.length) return;
-
   try{
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=eur`;
-    const res = await fetch(url, {signal:AbortSignal.timeout(8000)});
+    const res = await fetch(`${WORKER_URL}/prices?syms=${syms.join(",")}`,
+      {signal: AbortSignal.timeout(8000)}
+    );
     if(!res.ok) return;
     const data = await res.json();
-
-    // Reverse mapping id → symbol
-    Object.entries(CG_IDS).forEach(([sym,id])=>{
-      if(data[id]?.eur) LIVE[sym]=data[id].eur;
+    // Stocker dans le cache
+    Object.entries(data.prices||{}).forEach(([sym,val])=>{
+      LIVE[sym] = val; // { eur, change }
     });
-    // Stablecoins toujours ~0.92€ (1 USD)
-    ["USDT","USDC","DAI"].forEach(s=>{ if(!LIVE[s]) LIVE[s]=0.92; });
-    console.log("✅ Crypto prices updated from CoinGecko");
-    // Affiche badge LIVE
-    const b=document.getElementById("live-badge");
-    if(b) b.style.display="inline";
+    console.log(`✅ ${Object.keys(data.prices||{}).length} crypto prices updated`);
+    showLiveBadge();
   }catch(e){
-    console.warn("CoinGecko unavailable, using fallback prices");
+    console.warn("Worker unavailable for crypto prices, using fallback");
   }
 }
 
-// ── FETCH ACTIONS/ETF (Yahoo Finance via proxy CORS) ──
+// ── FETCH ACTIONS & ETF ──
 async function fetchStockPrices(){
-  const allMarket = [
-    ...S.markets.stocks,
-    ...S.markets.etf,
-    ...S.markets.cex,
+  const stockSyms = [
+    ...S.markets.stocks.map(m=>m.symbol),
+    ...S.markets.etf.map(m=>m.symbol),
   ];
-  const syms = [...new Set(allMarket.map(m=>m.symbol.toUpperCase()))];
-  // Filtre uniquement les non-crypto
-  const stockSyms = syms.filter(s=>!CG_IDS[s]);
-  if(!stockSyms.length) return;
+  const syms = [...new Set(stockSyms.map(s=>s.toUpperCase()))];
+  if(!syms.length) return;
 
-  // Yahoo Finance — on fetch en parallèle (max 5 à la fois)
-  const chunks = [];
-  for(let i=0;i<stockSyms.length;i+=5) chunks.push(stockSyms.slice(i,i+5));
-
-  for(const chunk of chunks){
-    await Promise.allSettled(chunk.map(async sym=>{
-      try{
-        // Yahoo Finance API publique — pas de clé nécessaire
-        const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1d`;
-        const res=await fetch(url,{signal:AbortSignal.timeout(6000)});
-        if(!res.ok) return;
-        const data=await res.json();
-        const rawPrice=data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-        const currency=data?.chart?.result?.[0]?.meta?.currency||"USD";
-        if(!rawPrice) return;
-        // Conversion USD → EUR (taux approximatif, en prod utiliser une API de change)
-        const eurRate = currency==="USD"?0.92:1;
-        LIVE[sym]=rawPrice*eurRate;
-        console.log(`✅ ${sym}: ${(rawPrice*eurRate).toFixed(2)}€`);
-      }catch{
-        // Silencieux — fallback utilisé
+  // Fetch en parallèle via le Worker
+  await Promise.allSettled(syms.map(async sym=>{
+    try{
+      const res = await fetch(`${WORKER_URL}/stock?sym=${encodeURIComponent(sym)}`,
+        {signal: AbortSignal.timeout(8000)}
+      );
+      if(!res.ok) return;
+      const data = await res.json();
+      if(data.price){
+        LIVE[sym] = { eur: data.price, change: data.change||0 };
+        console.log(`✅ ${sym}: ${data.price.toFixed(2)}€`);
       }
-    }));
+    }catch{
+      // fallback silencieux
+    }
+  }));
+}
+
+// ── LECTURE WALLET RÉELLE ──
+async function fetchWalletBalances(address, chain){
+  try{
+    const res = await fetch(
+      `${WORKER_URL}/wallet?address=${encodeURIComponent(address)}&chain=${chain}`,
+      {signal: AbortSignal.timeout(12000)}
+    );
+    if(!res.ok) throw new Error(`Worker error ${res.status}`);
+    const data = await res.json();
+    return data.tokens || [];
+  }catch(e){
+    console.warn("Wallet fetch error:", e.message);
+    return null; // null = erreur, [] = wallet vide
   }
 }
 
@@ -949,7 +952,12 @@ async function refreshAllPrices(){
   }
 }
 
-// Lance le refresh au démarrage puis toutes les 60s
+function showLiveBadge(){
+  const b = document.getElementById("live-badge");
+  if(b) b.style.display = "inline";
+}
+
+// Lance au démarrage puis toutes les 60s
 function startPriceRefresh(){
   refreshAllPrices();
   setInterval(refreshAllPrices, 60000);
@@ -1331,53 +1339,75 @@ function qcFill(name,sym){
 }
 
 async function submitWallet(){
-  const addr=document.getElementById("w-addr").value.trim();
-  const label=document.getElementById("w-label").value.trim();
-  if(!addr){alert("Entre une adresse publique.");return;}
+  const addr  = document.getElementById("w-addr").value.trim();
+  const label = document.getElementById("w-label").value.trim();
+  if(!addr){ alert("Entre une adresse publique."); return; }
 
-  // Simulation lecture blockchain (en prod → appel API Moralis/Alchemy)
-  const scanBox=document.getElementById("scan-box");
-  const scanTxt=document.getElementById("scan-txt");
-  const scanAddr=document.getElementById("scan-addr");
+  const scanBox  = document.getElementById("scan-box");
+  const scanTxt  = document.getElementById("scan-txt");
+  const scanAddr = document.getElementById("scan-addr");
+  const okBtn    = document.querySelector("#panel-wallet .m-ok");
+
   scanBox.classList.add("show");
-  scanAddr.textContent=addr;
-  scanTxt.textContent="Connexion à la blockchain…";
-  await sleep(800);
-  scanTxt.textContent="Détection des tokens…";
-  await sleep(900);
-  scanTxt.textContent="Calcul des balances…";
-  await sleep(700);
+  scanAddr.textContent = addr;
+  scanTxt.textContent  = "Connexion à la blockchain…";
+  if(okBtn) okBtn.disabled = true;
 
-  // Tokens simulés selon la blockchain
-  const demoTokens={
-    ethereum:[{name:"Ethereum",sym:"ETH",qty:0.85},{name:"USDC",sym:"USDC",qty:450}],
-    bitcoin:[{name:"Bitcoin",sym:"BTC",qty:0.0234}],
-    solana:[{name:"Solana",sym:"SOL",qty:12.4}],
-    polygon:[{name:"Polygon",sym:"MATIC",qty:850}],
-    bsc:[{name:"BNB",sym:"BNB",qty:1.2}],
-    avalanche:[{name:"Avalanche",sym:"AVAX",qty:8.5}],
-    arbitrum:[{name:"Ethereum",sym:"ETH",qty:0.32}],
-    optimism:[{name:"Ethereum",sym:"ETH",qty:0.18}],
-  };
-  const tokens=demoTokens[modalChain]||[{name:"Token","sym":"TKN",qty:10}];
+  try{
+    scanTxt.textContent = "Lecture des tokens en cours…";
+    const tokens = await fetchWalletBalances(addr, modalChain);
 
-  tokens.forEach(t=>{
-    const exists=S.cryptos.find(c=>c.symbol===t.sym);
-    if(!exists){
-      S.cryptos.push({
-        id:Date.now().toString()+Math.random(),
-        name:t.name, symbol:t.sym, qty:t.qty,
-        buyPrice:price(t.sym)*0.85,
-        buyDate:new Date().toISOString().split("T")[0],
-        source:"wallet", walletAddr:addr, walletLabel:label||modalChain
-      });
+    if(tokens === null){
+      // Erreur réseau → message clair
+      scanTxt.innerHTML = "⚠️ Impossible de lire le wallet.<br><small>Vérifie que le Worker est déployé et l'adresse correcte.</small>";
+      scanTxt.style.color = "var(--red)";
+      if(okBtn) okBtn.disabled = false;
+      return;
     }
-  });
 
-  save();
+    if(tokens.length === 0){
+      scanTxt.textContent = "Wallet vide ou aucun token détecté sur cette blockchain.";
+      await sleep(1500);
+    } else {
+      scanTxt.textContent = `✅ ${tokens.length} token(s) détecté(s) !`;
+      await sleep(800);
+
+      // Ajoute les tokens au portfolio
+      const currentPrice = price; // référence à la fonction price()
+      tokens.forEach(t => {
+        const sym = t.symbol.toUpperCase();
+        const exists = S.cryptos.find(c =>
+          c.symbol === sym && c.source === "wallet" && c.walletAddr === addr
+        );
+        if(!exists){
+          S.cryptos.push({
+            id:          Date.now().toString() + Math.random(),
+            name:        t.name,
+            symbol:      sym,
+            qty:         t.quantity,
+            buyPrice:    currentPrice(sym), // prix actuel = prix d'achat par défaut
+            buyDate:     new Date().toISOString().split("T")[0],
+            source:      "wallet",
+            walletAddr:  addr,
+            walletLabel: label || modalChain,
+            chain:       modalChain,
+          });
+        }
+      });
+      save();
+    }
+
+  } catch(e) {
+    scanTxt.textContent = "Erreur de connexion. Réessaie.";
+    scanTxt.style.color = "var(--red)";
+    await sleep(1500);
+  }
+
   scanBox.classList.remove("show");
-  document.getElementById("w-addr").value="";
-  document.getElementById("w-label").value="";
+  scanTxt.style.color = "";
+  document.getElementById("w-addr").value  = "";
+  document.getElementById("w-label").value = "";
+  if(okBtn) okBtn.disabled = false;
   closeModal();
   renderPortfolio();
 }
