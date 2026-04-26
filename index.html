@@ -837,6 +837,26 @@ async function init() {
         applyPlan();
       }
 
+      // Récupère les crédits IA si plan Free
+      if (S.plan === "free") {
+        try {
+          const checkRes  = await fetch(`${WORKER_URL}/ai/check?tid=${TID}`, {
+            signal: AbortSignal.timeout(4000)
+          });
+          const checkData = await checkRes.json();
+          if (checkData.credits > 0) {
+            document.getElementById("ai-sub").textContent =
+              `${checkData.credits} crédit(s) disponible(s)`;
+          } else if (checkData.remaining > 0) {
+            document.getElementById("ai-sub").textContent =
+              `${checkData.remaining} analyse(s) gratuite(s) cette semaine`;
+          } else {
+            document.getElementById("ai-sub").textContent =
+              "Quota atteint — Achète des crédits ou passe Premium";
+          }
+        } catch {}
+      }
+
       // Récupère le portfolio depuis Supabase
       const pfRes  = await fetch(`${WORKER_URL}/portfolio/load?tid=${TID}`, {
         signal: AbortSignal.timeout(6000),
@@ -850,34 +870,30 @@ async function init() {
 
         if (remoteDate > localDate || !S.cryptos.length) {
           // Supabase est plus récent → on prend Supabase
-          S.cryptos = pfData.cryptos  || [];
-          S.markets = pfData.markets  || { stocks:[], etf:[], cex:[] };
-          // Sauvegarde en localStorage pour la prochaine fois
+          S.cryptos  = pfData.cryptos  || [];
+          S.markets  = pfData.markets  || { stocks:[], etf:[], cex:[] };
           localStorage.setItem("cn_c",          JSON.stringify(S.cryptos));
           localStorage.setItem("cn_m",          JSON.stringify(S.markets));
           localStorage.setItem("cn_updated_at", remoteDate.toString());
           console.log("✅ Portfolio chargé depuis Supabase");
-          // Re-render avec les nouvelles données
           await fetchCryptoPrices();
           renderPortfolio();
           renderMarkets();
         } else {
-          // localStorage est plus récent → on push vers Supabase
           console.log("✅ Portfolio local plus récent → sync vers Supabase");
           syncToSupabase().catch(() => {});
         }
       } else if (S.cryptos.length) {
-        // Pas de portfolio en base mais on en a un en local → on push
         console.log("📤 Push portfolio local vers Supabase");
         syncToSupabase().catch(() => {});
       }
 
     } catch (e) {
       console.warn("Supabase init sync failed:", e.message);
-      // Pas grave — localStorage est déjà chargé
     }
   }
 }
+
 
 // ── Marque la date de dernière modif locale ──
 // Ajoute cette ligne dans save() après localStorage :
