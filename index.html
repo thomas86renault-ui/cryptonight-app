@@ -614,16 +614,28 @@ button,input,select,textarea{font-family:var(--f);border:none;outline:none;backg
     <div class="form-panel show" id="panel-wallet">
       <div class="fp-note"><strong>🔒 100% sécurisé</strong> — Une adresse publique est faite pour être partagée. On lit uniquement le solde, on ne touche jamais à tes fonds.</div>
       <label class="fp-lbl">Blockchain</label>
-      <div class="chain-grid">
-        <div class="chain-opt on" onclick="pickChain(this,'ethereum')">ETH</div>
-        <div class="chain-opt" onclick="pickChain(this,'bitcoin')">BTC</div>
-        <div class="chain-opt" onclick="pickChain(this,'solana')">SOL</div>
-        <div class="chain-opt" onclick="pickChain(this,'polygon')">MATIC</div>
-        <div class="chain-opt" onclick="pickChain(this,'bsc')">BNB</div>
-        <div class="chain-opt" onclick="pickChain(this,'avalanche')">AVAX</div>
-        <div class="chain-opt" onclick="pickChain(this,'arbitrum')">ARB</div>
-        <div class="chain-opt" onclick="pickChain(this,'optimism')">OP</div>
-      </div>
+  <div class="chain-grid">
+  <div class="chain-opt on" onclick="pickChain(this,'ethereum')">ETH</div>
+  <div class="chain-opt" onclick="pickChain(this,'bitcoin')">BTC</div>
+  <div class="chain-opt" onclick="pickChain(this,'solana')">SOL</div>
+  <div class="chain-opt" onclick="pickChain(this,'polygon')">MATIC</div>
+  <div class="chain-opt" onclick="pickChain(this,'bsc')">BNB</div>
+  <div class="chain-opt" onclick="pickChain(this,'avalanche')">AVAX</div>
+  <div class="chain-opt" onclick="pickChain(this,'arbitrum')">ARB</div>
+  <div class="chain-opt" onclick="pickChain(this,'optimism')">OP</div>
+  <div class="chain-opt" onclick="pickChain(this,'tron')">TRX</div>
+  <div class="chain-opt" onclick="pickChain(this,'ton')">TON</div>
+  <div class="chain-opt" onclick="pickChain(this,'xrp')">XRP</div>
+  <div class="chain-opt" onclick="pickChain(this,'base')">BASE</div>
+  <div class="chain-opt" onclick="pickChain(this,'sui')">SUI</div>
+  <div class="chain-opt" onclick="pickChain(this,'near')">NEAR</div>
+  <div class="chain-opt chain-opt-other" onclick="pickChain(this,'other')">Autre</div>
+</div>
+<!-- Champ libre pour "Autre" -->
+<div id="chain-other-wrap" style="display:none;margin-bottom:14px">
+  <label class="fp-lbl">Nom de la blockchain</label>
+  <input class="fp-inp" id="chain-other-input" placeholder="ex: Cosmos, Algorand…" style="margin-bottom:0">
+</div>
       <label class="fp-lbl">Ton adresse publique</label>
       <input class="fp-inp" id="w-addr" placeholder="0x… ou bc1… ou adresse SOL" autocomplete="off" spellcheck="false">
       <label class="fp-lbl">Libellé (optionnel)</label>
