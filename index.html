@@ -1241,7 +1241,16 @@ function selectMethod(m) {
 
 function pickChain(el, chain) {
   document.querySelectorAll(".chain-opt").forEach(o => o.classList.remove("on"));
-  el.classList.add("on"); modalChain = chain;
+  el.classList.add("on");
+  modalChain = chain;
+  const wrap = document.getElementById("chain-other-wrap");
+  if (chain === "other") {
+    wrap.style.display = "block";
+    document.getElementById("chain-other-input").focus();
+  } else {
+    wrap.style.display = "none";
+    document.getElementById("chain-other-input").value = "";
+  }
 }
 
 function qcFill(name, sym) {
@@ -1267,8 +1276,10 @@ async function submitWallet() {
 
   try {
     scanTxt.textContent = "Lecture des tokens en cours…";
-    const tokens = await fetchWalletBalances(addr, modalChain);
-
+    const effectiveChain = modalChain === "other"
+  ? (document.getElementById("chain-other-input").value.trim().toLowerCase() || "ethereum")
+  : modalChain;
+const tokens = await fetchWalletBalances(addr, effectiveChain);
     if (tokens === null) {
       scanTxt.innerHTML   = "⚠️ Impossible de lire le wallet.<br><small>Vérifie l'adresse et la blockchain sélectionnée.</small>";
       scanTxt.style.color = "var(--red)";
@@ -1302,7 +1313,7 @@ async function submitWallet() {
             source:      "wallet",
             walletAddr:  addr,
             walletLabel: label || modalChain,
-            chain:       modalChain,
+            chain: effectiveChain,
           });
         }
       });
