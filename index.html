@@ -956,7 +956,7 @@ function renderPortfolio() {
 
   const e     = enrich(S.cryptos);
   const total = e.reduce((s, a) => s + a.val,  0);
-  const cost  = e.reduce((s, a) => s + a.cost, 0);
+  const cost = e.filter(a => !a.noCost).reduce((s, a) => s + a.cost, 0);
   const pnl   = total - cost;
   const pct   = cost > 0 ? pnl / cost * 100 : 0;
   const best  = [...e].sort((a, b) => b.pct - a.pct)[0];
@@ -1045,11 +1045,10 @@ function renderCryptoList(e, total) {
       ${src}
     </div>
   </div>
-  <div class="td-r">${eur(c.val)}</div>
-  <div class="td-pnl hm ${c.pct >= 0 ? "up" : "dn"}">
-    <div class="pnl-pct">${c.pct >= 0 ? "+" : ""}${c.pct.toFixed(1)}%</div>
-    <div class="pnl-eur">${c.pnl >= 0 ? "+" : ""}${eur(c.pnl)}</div>
-  </div>
+  <div class="td-pnl hm ${c.noCost ? "ft" : c.pct >= 0 ? "up" : "dn"}">
+  <div class="pnl-pct">${c.noCost ? "—" : (c.pct >= 0 ? "+" : "") + c.pct.toFixed(1) + "%"}</div>
+  <div class="pnl-eur">${c.noCost ? "wallet" : (c.pnl >= 0 ? "+" : "") + eur(c.pnl)}</div>
+</div>
   <div class="td-r">
     <div>${eurFull(c.cp)}</div>
     <div class="del-btn" onclick="deleteCrypto('${c.id}')">Supprimer</div>
@@ -1308,7 +1307,8 @@ const tokens = await fetchWalletBalances(addr, effectiveChain);
             name:        t.name,
             symbol:      sym,
             qty:         t.quantity,
-            buyPrice:    livePrice, // ← prix live au moment de l'ajout
+            buyPrice: livePrice,
+            noCost: true, 
             buyDate:     new Date().toISOString().split("T")[0],
             source:      "wallet",
             walletAddr:  addr,
