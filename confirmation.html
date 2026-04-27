@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Paiement confirmé — CryptoNight</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@400;500;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#070709;--bg1:#0e0e12;--bg2:#15151b;--bg3:#1c1c24;
+  --line:#28282f;--line2:#3a3a48;
+  --txt:#f0f0f4;--txt2:#9090a8;--txt3:#52526a;
+  --green:#10b981;--gd:#10b98115;--gb:#10b98128;
+  --gold:#f59e0b;--god:#f59e0b12;--gob:#f59e0b30;
+  --blue:#6366f1;--bld:#6366f112;--blb:#6366f128;
+  --f:'Cabinet Grotesk',system-ui,sans-serif;
+  --fm:'JetBrains Mono',monospace;
+  --r:8px;--r2:12px;
+}
+html{font-size:14px;-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--txt);font-family:var(--f);min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px;overflow-x:hidden}
+
+.card{
+  background:var(--bg1);
+  border:1px solid var(--line);
+  border-radius:20px;
+  padding:40px 32px;
+  width:100%;
+  max-width:400px;
+  text-align:center;
+  position:relative;
+  overflow:hidden;
+}
+.card::before{
+  content:'';
+  position:absolute;
+  top:-60px;left:50%;transform:translateX(-50%);
+  width:260px;height:260px;
+  border-radius:50%;
+  background:radial-gradient(circle,#10b98112 0%,transparent 70%);
+  pointer-events:none;
+}
+
+/* ── Icône animée ── */
+.icon-wrap{
+  width:72px;height:72px;
+  border-radius:50%;
+  background:var(--gd);
+  border:1px solid var(--gb);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 24px;
+  animation:pop .4s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes pop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+.icon-wrap svg{width:32px;height:32px;stroke:var(--green);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.icon-wrap svg path{
+  stroke-dasharray:50;
+  stroke-dashoffset:50;
+  animation:draw .4s .3s ease forwards;
+}
+@keyframes draw{to{stroke-dashoffset:0}}
+
+/* ── Type badge ── */
+.type-badge{
+  display:inline-block;
+  font-size:9px;font-family:var(--fm);font-weight:700;
+  letter-spacing:1.2px;text-transform:uppercase;
+  padding:4px 10px;border-radius:4px;
+  margin-bottom:16px;
+  animation:fadein .3s .5s both;
+}
+.type-badge.premium{background:var(--god);color:var(--gold);border:1px solid var(--gob)}
+.type-badge.credits{background:var(--bld);color:var(--blue);border:1px solid var(--blb)}
+@keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ── Textes ── */
+.title{
+  font-size:24px;font-weight:900;letter-spacing:-.5px;
+  margin-bottom:8px;
+  animation:fadein .3s .55s both;
+}
+.subtitle{
+  font-size:14px;color:var(--txt2);line-height:1.6;
+  margin-bottom:28px;
+  animation:fadein .3s .6s both;
+}
+.subtitle strong{color:var(--txt)}
+
+/* ── Détails ── */
+.details{
+  background:var(--bg3);
+  border:1px solid var(--line);
+  border-radius:var(--r2);
+  padding:16px;
+  margin-bottom:28px;
+  text-align:left;
+  animation:fadein .3s .65s both;
+}
+.detail-row{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 0;
+  border-bottom:1px solid var(--line);
+}
+.detail-row:last-child{border-bottom:none}
+.dr-icon{
+  width:28px;height:28px;border-radius:7px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;flex-shrink:0;
+}
+.dr-label{font-size:12px;color:var(--txt3);flex:1}
+.dr-val{font-size:12px;font-family:var(--fm);font-weight:600;color:var(--txt)}
+
+/* ── Bouton retour ── */
+.btn-back{
+  width:100%;padding:14px;
+  border-radius:var(--r2);
+  background:var(--txt);color:var(--bg);
+  font-size:14px;font-weight:800;
+  cursor:pointer;border:none;
+  transition:opacity .12s;
+  animation:fadein .3s .7s both;
+}
+.btn-back:hover{opacity:.85}
+.btn-back:active{transform:scale(.98)}
+
+/* ── Note bas ── */
+.note{
+  font-size:11px;color:var(--txt3);
+  margin-top:16px;line-height:1.5;
+  font-family:var(--fm);
+  animation:fadein .3s .75s both;
+}
+
+/* ── Confetti ── */
+.confetti-wrap{position:fixed;inset:0;pointer-events:none;z-index:10;overflow:hidden}
+.dot{position:absolute;width:6px;height:6px;border-radius:50%;animation:fall linear forwards}
+@keyframes fall{
+  0%  {transform:translateY(-10px) rotate(0deg);opacity:1}
+  100%{transform:translateY(110vh) rotate(720deg);opacity:0}
+}
+</style>
+</head>
+<body>
+
+<div class="confetti-wrap" id="confetti"></div>
+
+<div class="card">
+  <div class="icon-wrap">
+    <svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+  </div>
+
+  <div class="type-badge" id="type-badge">Premium</div>
+
+  <div class="title" id="main-title">Paiement confirmé !</div>
+  <div class="subtitle" id="main-sub">
+    Ton accès est activé.<br>
+    <strong>Bienvenue dans CryptoNight Premium ✨</strong>
+  </div>
+
+  <div class="details" id="details-block">
+    <div class="detail-row" id="row-plan">
+      <div class="dr-icon" style="background:var(--god)">⭐</div>
+      <div class="dr-label">Plan activé</div>
+      <div class="dr-val" id="val-plan">Premium</div>
+    </div>
+    <div class="detail-row">
+      <div class="dr-icon" style="background:var(--gd)">🤖</div>
+      <div class="dr-label" id="lbl-ai">Analyses IA</div>
+      <div class="dr-val" id="val-ai">Illimitées</div>
+    </div>
+    <div class="detail-row">
+      <div class="dr-icon" style="background:#f43f5e15">🔔</div>
+      <div class="dr-label">Alertes Telegram</div>
+      <div class="dr-val">Activées</div>
+    </div>
+  </div>
+
+  <button class="btn-back" onclick="goBack()">
+    Retour à l'app →
+  </button>
+
+  <div class="note" id="note-txt">
+    Un message de confirmation t'a été envoyé sur Telegram.
+  </div>
+</div>
+
+<script>
+const tg     = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+// ── Détecte le type de paiement via l'URL ──
+const params = new URLSearchParams(window.location.search);
+const type   = params.get("type") || "premium"; // "premium" ou "credits"
+
+if (type === "credits") {
+  document.getElementById("type-badge").textContent  = "Crédits IA";
+  document.getElementById("type-badge").className    = "type-badge credits";
+  document.getElementById("main-title").textContent  = "Crédits ajoutés !";
+  document.getElementById("main-sub").innerHTML      = "Tes analyses sont prêtes.<br><strong>+5 crédits IA disponibles 🚀</strong>";
+  document.getElementById("val-plan").textContent    = "Crédits";
+  document.getElementById("row-plan").querySelector(".dr-icon").textContent = "💳";
+  document.getElementById("row-plan").querySelector(".dr-icon").style.background = "var(--bld)";
+  document.getElementById("lbl-ai").textContent      = "Analyses disponibles";
+  document.getElementById("val-ai").textContent      = "+5 crédits";
+  document.getElementById("note-txt").textContent    = "Tes crédits sont disponibles immédiatement dans l'app.";
+
+  // Cache la ligne alertes pour les crédits
+  document.querySelectorAll(".detail-row")[2].style.display = "none";
+}
+
+// ── Retour vers l'app ──
+function goBack() {
+  if (tg) {
+    tg.close();
+  } else {
+    window.location.href = "/";
+  }
+}
+
+// ── Confetti ──
+function spawnConfetti() {
+  const colors = ["#f59e0b","#10b981","#6366f1","#f43f5e","#06b6d4","#a78bfa"];
+  const wrap   = document.getElementById("confetti");
+  for (let i = 0; i < 48; i++) {
+    const dot  = document.createElement("div");
+    dot.className = "dot";
+    dot.style.cssText = `
+      left:${Math.random()*100}%;
+      background:${colors[Math.floor(Math.random()*colors.length)]};
+      width:${4+Math.random()*6}px;
+      height:${4+Math.random()*6}px;
+      animation-duration:${1.2+Math.random()*1.8}s;
+      animation-delay:${Math.random()*0.6}s;
+    `;
+    wrap.appendChild(dot);
+  }
+  setTimeout(() => wrap.innerHTML = "", 3500);
+}
+
+setTimeout(spawnConfetti, 300);
+</script>
+</body>
+</html>
