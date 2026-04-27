@@ -1045,6 +1045,7 @@ function renderCryptoList(e, total) {
       ${src}
     </div>
   </div>
+  <div class="td-r">${eur(c.val)}</div>
   <div class="td-pnl hm ${c.noCost ? "ft" : c.pct >= 0 ? "up" : "dn"}">
   <div class="pnl-pct">${c.noCost ? "—" : (c.pct >= 0 ? "+" : "") + c.pct.toFixed(1) + "%"}</div>
   <div class="pnl-eur">${c.noCost ? "wallet" : (c.pnl >= 0 ? "+" : "") + eur(c.pnl)}</div>
