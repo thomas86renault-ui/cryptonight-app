@@ -1569,8 +1569,11 @@ async function runAI() {
     }catch(e){console.warn("Quota check:",e.message);}
   }
 
-  // ── 2. CONSTRUCTION DU PROMPT ──
-  btn.textContent="Analyse…";
+ // ── 2. CONSTRUCTION DU PROMPT ──
+btn.textContent = "Chargement des prix…";
+await fetchCryptoPrices();   // ← ICI ✅
+await fetchStockPrices();    // ← ICI ✅
+btn.textContent = "Analyse…";
   const enriched=all.map(a=>{const cp=price(a.symbol),val=a.qty*cp,cost=a.qty*a.buyPrice;return{...a,cp,val,cost,pnl:val-cost,pct:cost>0?(val-cost)/cost*100:0};});
   const totalVal=enriched.reduce((s,a)=>s+a.val,0),totalCost=enriched.reduce((s,a)=>s+a.cost,0),totalPnl=totalVal-totalCost;
   const hasCrypto=S.cryptos.length>0||S.markets.cex.length>0,hasStocks=S.markets.stocks.length>0||S.markets.etf.length>0;
@@ -1579,7 +1582,19 @@ async function runAI() {
   const detail=enriched.map(a=>`  • ${a.name} (${a.symbol}) [${a.cat}] : ${a.qty%1===0?a.qty:a.qty.toFixed(4)} unités, achat à ${eurFull(a.buyPrice)}, valeur ${eur(a.val)}, P&L ${a.pnl>=0?"+":""}${eur(a.pnl)} (${a.pct>=0?"+":""}${a.pct.toFixed(1)}%)`).join("\n");
   const bonusInstruction=!hasCrypto?`\n**💡 Opportunité crypto** — Cet utilisateur n'a pas de crypto. Donne 1 conseil simple pour commencer.`:!hasStocks?`\n**📈 Diversification** — Cet utilisateur n'a que de la crypto. Suggère 1 ETF simple pour diversifier.`:"";
   const prompt=`Tu es un conseiller en gestion de patrimoine pour CryptoNight. Analyse le patrimoine COMPLET (crypto + actions + ETF). Parle en français, directement, comme un ami qui s'y connaît.
+  async function runAI() {
+  // ... vérification quota ...
 
+  btn.textContent = "Chargement des prix…";
+
+  // ── AJOUTE CES 2 LIGNES avant la construction du prompt ──
+  await fetchCryptoPrices();
+  await fetchStockPrices();
+
+  btn.textContent = "Analyse…";
+
+  // Suite normale : construction du prompt enriched...
+  const enriched = all.map(a => { ...
 ═══ PATRIMOINE TOTAL : ${eur(totalVal)} ═══
 P&L global : ${totalPnl>=0?"+":""}${eur(totalPnl)} (${totalPnl>=0?"+":""}${((totalPnl/totalCost)*100).toFixed(1)}%)
 
